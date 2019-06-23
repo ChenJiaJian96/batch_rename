@@ -9,6 +9,8 @@ from xlrd import open_workbook, XLRDError
 # 温馨提示
 # 1.请勿在文件名中添加'.'
 
+# 打包exe文件
+# pyinstaller -F -w main.py
 
 class MyGUI:
     def __init__(self):
@@ -19,13 +21,14 @@ class MyGUI:
         self.table_name_list0 = []  # 表格中现有的旧文件名列表
         self.table_name_list1 = []  # 表格中现有的新文件名列表
         self.table_ext_list = []  # 表格中现有的拓展名列表
+        self.disable_list = []  # 记录被删除的数据（适应表格删除行后索引不会更新的特点）
         self.name_reflect_dict = dict()  # 新旧文件名映射（从模板中获取）
         self.template_path = ""  # 新文件名文档的路径
         self.template_data = None  # 新文件名文档数据
         self.init_window = Tk()
 
         self.pos_label = Label(self.init_window, text="当前位置")
-        self.edit_tips_label = Label(self.init_window, text="TIPS:双击可修改新文件名")
+        self.edit_tips_label = Label(self.init_window, text="TIPS:双击原文件名删除该列\n 双击新文件名修改")
         self.cur_pos_label = Label(self.init_window, justify=LEFT)
         # 表格
         columns = ("1", "2", "3")
@@ -37,13 +40,20 @@ class MyGUI:
         self.open_files_button = Button(self.init_window, text="选择文件", command=self.open_files)
         self.open_xls_button = Button(self.init_window, text="选择模板", command=self.open_template)
         self.confirm_button = Button(self.init_window, text="确认更改", command=self.check_new_name)
+        self.clear_button = Button(self.init_window, text="清空表格", command=self.reset_tree)
 
         self.set_init_window()
         self.init_window.mainloop()
 
+    def reset_tree(self):
+        for item in self.tree_view.get_children():
+            self.tree_view.delete(item)
+            rn = int(str(item).replace('I', ''))
+            self.disable_list.append(rn - 1)
+
     def set_init_window(self):
         self.init_window.title("一键批量修改文件名")
-        self.init_window.geometry("530x275+100+100")
+        self.init_window.geometry("560x300+100+100")
 
         self.pos_label.place(relx=0.05, rely=0.05, relheight=0.1)
         self.cur_pos_label.place(relx=0.2, rely=0.05, relheight=0.1)
@@ -59,10 +69,10 @@ class MyGUI:
         self.tree_view.heading("2", text="新文件名")
         self.tree_view.heading("3", text="类型")
 
-        self.open_files_button.place(relx=0.8, rely=0.2, relwidth=0.15, relheight=0.18)
-        self.open_xls_button.place(relx=0.8, rely=0.49, relwidth=0.15, relheight=0.18)
-        self.confirm_button.place(relx=0.8, rely=0.77, relwidth=0.15, relheight=0.18)
-
+        self.open_files_button.place(relx=0.8, rely=0.2, relwidth=0.15, relheight=0.15)
+        self.open_xls_button.place(relx=0.8, rely=0.4, relwidth=0.15, relheight=0.15)
+        self.confirm_button.place(relx=0.8, rely=0.6, relwidth=0.15, relheight=0.15)
+        self.clear_button.place(relx=0.8, rely=0.8, relwidth=0.15, relheight=0.15)
         self.edit_tips_label.place(relx=0.05, rely=0.85, relwidth=0.3)
 
         self.set_button_state(0)
@@ -73,13 +83,12 @@ class MyGUI:
         if len(file_paths) > 0:
             if not self.is_same_location(file_paths[0]):
                 messagebox.showwarning("文件路径冲突", "文件路径发生冲突，单次修改请在同一路径下操作")
-                self.clear_tree()
+                return
 
             self.set_file_location(file_paths[0])
             for path in file_paths:
                 if not self.is_file_added(path):
                     self.add_file_to_table(path)
-                    print("选中的文件" + path)
 
     def open_template(self):
         template_path = filedialog.askopenfilename(title="请选中新文件名的模板文件",
@@ -117,16 +126,22 @@ class MyGUI:
 
     def is_same_location(self, file_path):
         (file_path, temp_filename) = os.path.split(file_path)
-        if self.cur_path == file_path or self.cur_path == "":
+        if self.cur_path == file_path + '/' or self.cur_path == "":
             return True
         else:
             return False
 
     def is_file_added(self, file_path):
         (file_path, file_name) = os.path.split(file_path)
-        if file_name in self.table_name_list:
+        temp_name_list = []
+        for i in range(len(self.table_name_list)):
+            if i not in self.disable_list:
+                temp_name_list.append(self.table_name_list[i])
+        if file_name in temp_name_list:
+            print("have added")
             return True
         else:
+            print("haven't added")
             self.table_name_list.append(file_name)
             return False
 
@@ -147,29 +162,31 @@ class MyGUI:
         if temp_dict is None:
             messagebox.showwarning("模板文件有误", "模板文件为空或格式损坏，请检查文件内容")
         else:
+            # 首先检查新文件名的合法性
+            for new_name in temp_dict.values():
+                if not is_name_legal(new_name):
+                    messagebox.showwarning("新文件名格式有误", "文档中含非法文件名：" + new_name + "\n合法文件名不应存在\\ / \" * : ? < > | 等字符")
+                    return
             self.name_reflect_dict = temp_dict
-            print(self.name_reflect_dict)
             self.update_table_by_dict()
 
     # 使用文件名映射更新表格（全局）
     def update_table_by_dict(self):
         for i in range(len(self.table_name_list0)):
             if self.name_reflect_dict.keys().__contains__(self.table_name_list0[i]):
-                temp_name = self.name_reflect_dict[self.table_name_list0[i]]
-                if not is_name_legal(temp_name):
-                    messagebox.showwarning("新文件名格式有误", "新文件名有误：" + temp_name + "\n合法文件名不应存在\\ / \" * : ? < > | 等字符")
-                    self.table_name_list1.clear()
-                    return
-                else:
+                if i not in self.disable_list:
+                    temp_name = self.name_reflect_dict[self.table_name_list0[i]]
                     self.table_name_list1.append(temp_name)
             else:
                 self.table_name_list1.append("")
         # 更新新文件名列表后插入表格
+        print(self.table_name_list1)
         row_str = self.tree_view.get_children()
         for cur_row in row_str:
             rn = int(str(cur_row).replace('I', ''))
             print(cur_row)
             self.tree_view.set(cur_row, column='#2', value=self.table_name_list1[rn - 1])
+        self.tree_view.update()
         self.set_button_state(1)
 
     # 使按钮失效，无法使用
@@ -178,15 +195,6 @@ class MyGUI:
             self.confirm_button.config(state=DISABLED)
         elif i == 1:
             self.confirm_button.config(state=ACTIVE)
-
-    def clear_tree(self):
-        x = self.tree_view.children
-        for item in x:
-            self.tree_view.delete(item)
-        self.table_name_list.clear()
-        self.table_name_list0.clear()
-        self.table_name_list1.clear()
-        self.table_ext_list.clear()
 
     def set_cell_value(self, event):  # 双击进入编辑状态
         for item in self.tree_view.selection():
@@ -199,6 +207,12 @@ class MyGUI:
         cn = int(str(column).replace('#', ''))
         rn = int(str(row).replace('I', ''))
         print(rn)
+        if cn == 1:
+            def del_tree_column():
+                self.tree_view.delete(item)
+                self.disable_list.append(rn - 1)
+
+            del_tree_column()
         if cn == 2:
             entry_edit = Text(self.init_window, width=20, height=1)
             entry_edit.place(relx=0.35, rely=0.85, relwidth=0.3, relheight=0.08)
@@ -237,13 +251,13 @@ class MyGUI:
         print(self.cur_path)
         os.chdir(self.cur_path)
         for i in range(len(self.table_name_list0)):
-            if not len(self.table_name_list1[i]) == 0:
+            if not len(self.table_name_list1[i]) == 0 and i not in self.disable_list:
                 name = self.table_name_list[i]
                 (name, ext) = os.path.splitext(name)
                 old_name = self.table_name_list0[i] + ext
                 new_name = self.table_name_list1[i] + ext
-                print("old_name" + old_name)
-                print("new_name" + new_name)
+                print("old_name: " + old_name)
+                print("new_name: " + new_name)
                 try:
                     os.rename(old_name, new_name)
                 except FileNotFoundError:
@@ -251,8 +265,6 @@ class MyGUI:
                     return
 
         messagebox.showinfo("文件重命名成功", "所有文件名修改成功")
-        # todo: 清空表格
-        # todo: 删除添加的文件
 
 
 # 数据类
