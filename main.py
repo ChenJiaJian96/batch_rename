@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
 from tkinter import *
-from tkinter import filedialog, messagebox, ttk
-
+from tkinter import filedialog, messagebox, ttk, scrolledtext
+from time import localtime, time
 from xlrd import open_workbook, XLRDError
+
+ico_path = ".\CSPGCL.ico"
 
 
 # 温馨提示
@@ -42,6 +44,9 @@ class MyGUI:
         self.confirm_button = Button(self.init_window, text="确认更改", command=self.check_new_name)
         self.clear_button = Button(self.init_window, text="清空表格", command=self.reset_tree)
 
+        self.question_label = Label(self.init_window, text=" ? ", font="bold, 8")
+        self.exclamation_label = Label(self.init_window, text=" ! ", font="bold, 8")
+
         self.set_init_window()
         self.init_window.mainloop()
 
@@ -54,6 +59,7 @@ class MyGUI:
     def set_init_window(self):
         self.init_window.title("一键批量修改文件名")
         self.init_window.geometry("560x300+100+100")
+        self.init_window.iconbitmap(ico_path)
 
         self.pos_label.place(relx=0.05, rely=0.05, relheight=0.1)
         self.cur_pos_label.place(relx=0.2, rely=0.05, relheight=0.1)
@@ -73,9 +79,42 @@ class MyGUI:
         self.open_xls_button.place(relx=0.8, rely=0.4, relwidth=0.15, relheight=0.15)
         self.confirm_button.place(relx=0.8, rely=0.6, relwidth=0.15, relheight=0.15)
         self.clear_button.place(relx=0.8, rely=0.8, relwidth=0.15, relheight=0.15)
-        self.edit_tips_label.place(relx=0.05, rely=0.85, relwidth=0.3)
+        self.edit_tips_label.place(relx=0.05, rely=0.83, relwidth=0.3)
+
+        # 生成右侧提示按钮
+        self.question_label.bind("<Button-1>", self.show_instruction)
+        self.question_label.place(relx=0.96, rely=0.8, relwidth=0.03, relheight=0.08)
+        self.exclamation_label.bind("<Button-1>", func=self.show_software_detail)
+        self.exclamation_label.place(relx=0.96, rely=0.9, relwidth=0.03, relheight=0.08)
 
         self.set_button_state(0)
+
+    # 显示评分标准
+    def show_score_standard(self, event):
+        print("nothing")
+        # standard_dialog = StandardDialog()
+        # self.init_window.wait_window(standard_dialog.rootWindow)
+
+    # 显示软件详情
+    @staticmethod
+    def show_software_detail(event):
+        messagebox.showinfo("关于", "ISBN:\n著作权人:\n出版单位:")
+
+    # 显示操作说明
+    def show_instruction(self, event):
+        instruction_dialog = InstructionDialog()
+        self.init_window.wait_window(instruction_dialog.rootWindow)
+
+    @staticmethod
+    def get_greetings(hour):
+        if 6 <= hour <= 11:
+            return "早上好"
+        elif 11 <= hour <= 13:
+            return "中午好"
+        elif 13 <= hour <= 18:
+            return "下午好"
+        else:
+            return "晚上好"
 
     def open_files(self):
         file_paths = filedialog.askopenfilenames(title="请选中需要更改文件名的文件",
@@ -326,6 +365,72 @@ def is_name_legal(text):
         return True
     else:
         return False
+
+
+# 显示使用流程弹窗
+class InstructionDialog:
+    def __init__(self):
+        self.rootWindow = Toplevel()
+        self.rootWindow.title('使用流程和常见问题')
+        self.rootWindow.geometry("500x400+250+250")
+        self.rootWindow.iconbitmap(ico_path)
+
+        self.guide_button = Button(self.rootWindow, text="使用流程", command=lambda: self.update_text(1))
+        self.quest_button = Button(self.rootWindow, text="常见问题", command=lambda: self.update_text(2))
+        self.wel_text = MyGUI.get_greetings(localtime(time()).tm_hour) + ",欢迎查阅使用流程及常见问题\n\n请点击上面按钮进行查询↑↑↑"
+        self.guide_text = "使用说明\n\n" \
+                          "一、使用流程\n" \
+                          "选中需要重命名的文件->打开模板文件->查看重命名表格->确定重命名\n\n" \
+                          "二、选中需要重命名的文件\n" \
+                          "2.1--本系统可以直接重命名各种类型的文件。请在打开文件窗中选中需要重命名的文件，" \
+                          "未选中文件则无法使用接下来的功能；\n" \
+                          "2.2--请保证需要重命名的文件处于同一文件夹，且文件名不含【.】\n" \
+                          "（由于模板文件由Excel文件储存，小数点容易导致数据错误）\n\n" \
+                          "三、打开模板文件\n" \
+                          "3.1--模板文件由表格文件组成，如.xlsx/.xls/.et等文件。请在打开文件窗中选中对应的模板文件，" \
+                          "若文件过大需要耐心等待一段时间，模板文件由两列构成，分别为【旧文件名】及【新文件名】；\n" \
+                          "3.2--文件完整性检查，为了使本系统的功能均能正常使用，打开文件后会进行完整性检查，主要检查文件中是否" \
+                          "存在以下列，包括‘旧文件名’、‘新文件名’等，若数据不完整，将无法进行进一步操作；\n" \
+                          "3.3--文件名合法性检查，按照Windows标准合法文件名中不能包含【\\/:*?\"<>|】，若包含非法字符则直接导入失败\n\n" \
+                          "四、查看重命名表格\n" \
+                          "4.1--选择需要重命名的文件及打开模板文件后，新旧文件名会以倒序方式排列在主界面表格中，旧文件会对应重命名" \
+                          "为新文件名；\n" \
+                          "4.2--删除表格列，用户双击表格中对应旧文件名可以删除表格列，取消对应文件的重命名请求；\n" \
+                          "4.3--修改新文件名，用户可以双击表格中对应新文件名进行自定义修改，双击后请在弹出文本框中编辑，并点击确认。" \
+                          "若输入文件名非法，则无法修改。\n\n"\
+                          "五、确认重命名\n" \
+                          "用户在确认表格信息无误后可直接点击【确认更改】按钮执行操作。\n\n" \
+                          "六、主界面快捷按钮说明\n" \
+                          "6.1--【？】按钮：显示使用流程及常见问题弹窗；\n" \
+                          "6.2--【！】按钮：显示软件版权信息。"
+        self.quest_text = "常见问题说明\n\n" \
+                          "Q1.为什么有些按钮无法点击？\n" \
+                          "A1.在所需步骤未执行时软件会禁用部分按钮，请按照正确使用流程操作。\n\n" \
+                          "Q2.请打开正确格式的文件\n" \
+                          "A2.该软件仅能打开.xlsx/.xls/.et等表格文件，请检查打开文件格式。\n\n" \
+                          "Q3.文件路径冲突\n" \
+                          "A3.软件默认每次只能修改同一路径（文件夹）下的文件。\n\n" \
+                          "Q4.文件名格式有误\n" \
+                          "A4.请检查新文件名中是否包含非法字符。\n\n" \
+                          "Q5.无法找到文件\n" \
+                          "A5.请检查主界面显示的当前路径下是否包含对应文件。\n\n" \
+                          "其他问题请重启软件，无法解决请联系开发者。"
+        self.content_text = scrolledtext.ScrolledText(self.rootWindow, wrap=WORD)
+        self.box_scrollbar_y = Scrollbar(self.rootWindow)
+
+        self.guide_button.place(relx=0.27, rely=0.03, relwidth=0.2, relheight=0.1)
+        self.quest_button.place(relx=0.53, rely=0.03, relwidth=0.2, relheight=0.1)
+        self.content_text.place(relx=0.02, rely=0.16, relwidth=0.96, relheight=0.81)
+        self.update_text(0)
+
+    def update_text(self, update_type):
+        self.content_text.delete(1.0, END)
+        if update_type == 1:
+            self.content_text.insert(INSERT, self.guide_text)
+        elif update_type == 2:
+            self.content_text.insert(INSERT, self.quest_text)
+        else:
+            self.content_text.insert(INSERT, self.wel_text)
 
 
 MyGUI()
