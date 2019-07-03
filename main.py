@@ -87,14 +87,6 @@ class MyGUI:
         self.exclamation_label.bind("<Button-1>", func=self.show_software_detail)
         self.exclamation_label.place(relx=0.96, rely=0.9, relwidth=0.03, relheight=0.08)
 
-        self.set_button_state(0)
-
-    # 显示评分标准
-    def show_score_standard(self, event):
-        print("nothing")
-        # standard_dialog = StandardDialog()
-        # self.init_window.wait_window(standard_dialog.rootWindow)
-
     # 显示软件详情
     @staticmethod
     def show_software_detail(event):
@@ -153,7 +145,6 @@ class MyGUI:
             flag = 1
         if flag:
             messagebox.showwarning("模板文件格式有误", "模板文件格式有误，请检查后重新导入")
-            self.set_button_state(0)
             return False
         else:
             return True
@@ -226,14 +217,6 @@ class MyGUI:
             print(cur_row)
             self.tree_view.set(cur_row, column='#2', value=self.table_name_list1[rn - 1])
         self.tree_view.update()
-        self.set_button_state(1)
-
-    # 使按钮失效，无法使用
-    def set_button_state(self, i):
-        if i == 0:
-            self.confirm_button.config(state=DISABLED)
-        elif i == 1:
-            self.confirm_button.config(state=ACTIVE)
 
     def set_cell_value(self, event):  # 双击进入编辑状态
         for item in self.tree_view.selection():
@@ -276,6 +259,9 @@ class MyGUI:
 
     def check_new_name(self):
         print("def check_new_name")
+        if len(self.table_name_list0) - len(self.disable_list) == 0:
+            print("Nothing needed to be changed.")
+            return
         for new_name in self.table_name_list1:
             if len(new_name) == 0:
                 a = messagebox.askokcancel('空文件名提示', '个别文件无新文件名，是否继续更名？')
