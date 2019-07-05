@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
+from time import localtime, time
 from tkinter import *
 from tkinter import filedialog, messagebox, ttk, scrolledtext
-from time import localtime, time
+
 from xlrd import open_workbook, XLRDError
+from xlutils.copy import copy
+from xlwt import Workbook
 
 ico_path = ".\CSPGCL.ico"
+NEW_FILE_NAME = "新文件名"
+OLD_FILE_NAME = "旧文件名"
 
 
 # 温馨提示
@@ -23,10 +28,10 @@ class MyGUI:
         self.table_name_list0 = []  # 表格中现有的旧文件名列表
         self.table_name_list1 = []  # 表格中现有的新文件名列表
         self.table_ext_list = []  # 表格中现有的拓展名列表
-        self.disable_list = []  # 记录被删除的数据（适应表格删除行后索引不会更新的特点）
+        self.disable_pos_list = []  # 记录被删除的数据位置（适应表格删除行后索引不会更新的特点）
         self.name_reflect_dict = dict()  # 新旧文件名映射（从模板中获取）
-        self.template_path = ""  # 新文件名文档的路径
-        self.template_data = None  # 新文件名文档数据
+        self.template_path = ""  # 模板文档的路径
+        self.template_data = None  # 模板文档数据
         self.init_window = Tk()
 
         self.pos_label = Label(self.init_window, text="当前位置")
@@ -54,7 +59,7 @@ class MyGUI:
         for item in self.tree_view.get_children():
             self.tree_view.delete(item)
             rn = int(str(item).replace('I', ''))
-            self.disable_list.append(rn - 1)
+            self.disable_pos_list.append(rn - 1)
 
     def set_init_window(self):
         self.init_window.title("一键批量修改文件名")
@@ -72,7 +77,7 @@ class MyGUI:
         self.tree_view.column("3", width=50, anchor='center')
 
         self.tree_view.heading("1", text="原文件名")  # 显示表头
-        self.tree_view.heading("2", text="新文件名")
+        self.tree_view.heading("2", text=NEW_FILE_NAME)
         self.tree_view.heading("3", text="类型")
 
         self.open_files_button.place(relx=0.8, rely=0.2, relwidth=0.15, relheight=0.15)
@@ -87,30 +92,10 @@ class MyGUI:
         self.exclamation_label.bind("<Button-1>", func=self.show_software_detail)
         self.exclamation_label.place(relx=0.96, rely=0.9, relwidth=0.03, relheight=0.08)
 
-    # 显示软件详情
-    @staticmethod
-    def show_software_detail(event):
-        messagebox.showinfo("关于", "ISBN:\n著作权人:\n出版单位:")
-
-    # 显示操作说明
-    def show_instruction(self, event):
-        instruction_dialog = InstructionDialog()
-        self.init_window.wait_window(instruction_dialog.rootWindow)
-
-    @staticmethod
-    def get_greetings(hour):
-        if 6 <= hour <= 11:
-            return "早上好"
-        elif 11 <= hour <= 13:
-            return "中午好"
-        elif 13 <= hour <= 18:
-            return "下午好"
-        else:
-            return "晚上好"
-
     def open_files(self):
         file_paths = filedialog.askopenfilenames(title="请选中需要更改文件名的文件",
                                                  filetypes=[("All Files", '*')])
+        # 表格操作
         if len(file_paths) > 0:
             if not self.is_same_location(file_paths[0]):
                 messagebox.showwarning("文件路径冲突", "文件路径发生冲突，单次修改请在同一路径下操作")
@@ -119,20 +104,72 @@ class MyGUI:
             self.set_file_location(file_paths[0])
             for path in file_paths:
                 if not self.is_file_added(path):
+                    (file_path, file_name) = os.path.split(path)
+                    self.table_name_list.append(file_name)
                     self.add_file_to_table(path)
+        # 模板操作
+        self.create_template()
+
+    # 根据输入的数据创建模板
+    def create_template(self):
+        try:
+            open_workbook(self.template_path)
+        except FileNotFoundError:
+            # 文件夹下无模板文件，直接创建然后导入数据
+            wb = Workbook(encoding='ascii')
+            ws = wb.add_sheet("1")
+            ws.write(0, 0, OLD_FILE_NAME)
+            ws.write(0, 1, NEW_FILE_NAME)
+            new_row_id = 1
+            for i in range(len(self.table_name_list0)):
+                if i not in self.disable_pos_list:
+                    ws.write(new_row_id, 0, self.table_name_list0[i])
+                    new_row_id += 1
+            wb.save(self.template_path)
+            return
+
+        # 文件夹下已经存在模板文件
+        #  暂时不检查完整性
+        rb = open_workbook(self.template_path, formatting_info=True)
+        r_sheet = rb.sheet_by_index(0)
+        wb = copy(rb)
+        sheet = wb.get_sheet(0)
+
+        def update_old_name(old_name_list, disable_pos_list):
+            needed_add_name_list = []
+            old_name_index = 0  # 旧文件名列序号
+            name0_list = r_sheet.col_values(old_name_index, start_rowx=1, end_rowx=None)
+            for i in range(len(old_name_list)):
+                if i not in disable_pos_list:
+                    if old_name_list[i] not in name0_list:
+                        needed_add_name_list.append(old_name_list[i])
+            if len(needed_add_name_list) == 0:
+                print("没有文件名需要添加到模板文件中，或者所有文件名已经添加")
+                return
+            n_row = r_sheet.nrows
+            print("原模板文件中已经有" + str(n_row) + "行")
+            for name in needed_add_name_list:
+                print("将文件名" + name + "添加到模板文件中")
+                sheet.write(n_row, old_name_index, name)
+                n_row += 1
+
+        update_old_name(self.table_name_list0, self.disable_pos_list)
+        try:
+            wb.save(self.template_path)
+        except PermissionError:
+            messagebox.showwarning("请关闭文件下的模板并重新导入文件")
 
     def open_template(self):
-        template_path = filedialog.askopenfilename(title="请选中新文件名的模板文件",
-                                                   filetypes=[("表格文件", '*.xls; *.xlsx; *.et')])
-        print(template_path)
+        self.template_path = filedialog.askopenfilename(title="请选中新文件名的模板文件",
+                                                        filetypes=[("表格文件", '*.xls; *.xlsx; *.et')])
+        print(self.template_path)
         try:
-            temp_data = open_workbook(template_path)
+            temp_data = open_workbook(self.template_path)
         except FileNotFoundError:
             pass
         except XLRDError:
             messagebox.showwarning("请打开正确格式的模板文件")
         else:
-            self.template_path = template_path
             self.template_data = ExcelMaster(temp_data)
             if self.check_file_integrity():
                 self.init_name_reflect_dict()
@@ -153,6 +190,8 @@ class MyGUI:
         (file_path, temp_filename) = os.path.split(file_path)
         self.cur_path = file_path + '/'
         self.cur_pos_label.configure(text=self.cur_path)
+        # 更新模板文件位置
+        self.template_path = self.cur_path + "template.xls"
 
     def is_same_location(self, file_path):
         (file_path, temp_filename) = os.path.split(file_path)
@@ -161,20 +200,21 @@ class MyGUI:
         else:
             return False
 
+    # 判断当前文件是否已经添加
     def is_file_added(self, file_path):
         (file_path, file_name) = os.path.split(file_path)
         temp_name_list = []
         for i in range(len(self.table_name_list)):
-            if i not in self.disable_list:
+            if i not in self.disable_pos_list:
                 temp_name_list.append(self.table_name_list[i])
         if file_name in temp_name_list:
             print("have added")
             return True
         else:
             print("haven't added")
-            self.table_name_list.append(file_name)
             return False
 
+    # 将文件名添加到表格中
     def add_file_to_table(self, path):
         (path, name) = os.path.split(path)
         (name, ext) = os.path.splitext(name)
@@ -202,11 +242,14 @@ class MyGUI:
 
     # 使用文件名映射更新表格（全局）
     def update_table_by_dict(self):
+        print(self.name_reflect_dict)
         for i in range(len(self.table_name_list0)):
             if self.name_reflect_dict.keys().__contains__(self.table_name_list0[i]):
-                if i not in self.disable_list:
+                if i not in self.disable_pos_list:
                     temp_name = self.name_reflect_dict[self.table_name_list0[i]]
-                    self.table_name_list1.append(temp_name)
+                    if len(self.table_name_list1) < i + 1:
+                        self.table_name_list1.append("")  # 申请空间
+                    self.table_name_list1[i] = temp_name
             else:
                 self.table_name_list1.append("")
         # 更新新文件名列表后插入表格
@@ -232,7 +275,7 @@ class MyGUI:
         if cn == 1:
             def del_tree_column():
                 self.tree_view.delete(item)
-                self.disable_list.append(rn - 1)
+                self.disable_pos_list.append(rn - 1)
 
             del_tree_column()
         if cn == 2:
@@ -259,7 +302,7 @@ class MyGUI:
 
     def check_new_name(self):
         print("def check_new_name")
-        if len(self.table_name_list0) - len(self.disable_list) == 0:
+        if len(self.table_name_list0) - len(self.disable_pos_list) == 0:
             print("Nothing needed to be changed.")
             return
         for new_name in self.table_name_list1:
@@ -276,7 +319,7 @@ class MyGUI:
         print(self.cur_path)
         os.chdir(self.cur_path)
         for i in range(len(self.table_name_list0)):
-            if not len(self.table_name_list1[i]) == 0 and i not in self.disable_list:
+            if not len(self.table_name_list1[i]) == 0 and i not in self.disable_pos_list:
                 name = self.table_name_list[i]
                 (name, ext) = os.path.splitext(name)
                 old_name = self.table_name_list0[i] + ext
@@ -291,35 +334,56 @@ class MyGUI:
 
         messagebox.showinfo("文件重命名成功", "所有文件名修改成功")
 
+    # 显示软件详情
+    @staticmethod
+    def show_software_detail(event):
+        messagebox.showinfo("关于", "ISBN:\n著作权人:\n出版单位:")
+
+    # 显示操作说明
+    def show_instruction(self, event):
+        instruction_dialog = InstructionDialog()
+        self.init_window.wait_window(instruction_dialog.rootWindow)
+
+    @staticmethod
+    def get_greetings(hour):
+        if 6 <= hour <= 11:
+            return "早上好"
+        elif 11 <= hour <= 13:
+            return "中午好"
+        elif 13 <= hour <= 18:
+            return "下午好"
+        else:
+            return "晚上好"
+
 
 # 数据类
 class ExcelMaster:
     def __init__(self, data):
         self.data = data  # 源文件
-        self.table = None  # 保存当前正在处理的表格
+        self.sheet = None  # 保存当前正在处理的表格
         # 初始化表格
         self.set_table(0)
         # 获取表格总行数
-        self.nrow = self.table.nrows
+        self.nrow = self.sheet.nrows
 
     # index:第index个sheet,入参需要检查
     def set_table(self, index=0):
         if self.data is None:
             return "文件为空，无法打开工作表！"
         else:
-            self.table = self.data.sheet_by_index(index)
+            self.sheet = self.data.sheet_by_index(index)
 
     # 返回新旧文件名的映射
     def get_name_dict(self):
         i = self.col_index('旧文件名')
-        name0_list = self.table.col_values(i, start_rowx=1, end_rowx=None)
+        name0_list = self.sheet.col_values(i, start_rowx=1, end_rowx=None)
         j = self.col_index('新文件名')
-        name1_list = self.table.col_values(j, start_rowx=1, end_rowx=None)
+        name1_list = self.sheet.col_values(j, start_rowx=1, end_rowx=None)
         if len(name0_list) != len(name1_list) or len(name0_list) == 0:
             return None
         else:
-            type0_list = self.table.col_types(i, start_rowx=1, end_rowx=None)
-            type1_list = self.table.col_types(j, start_rowx=1, end_rowx=None)
+            type0_list = self.sheet.col_types(i, start_rowx=1, end_rowx=None)
+            type1_list = self.sheet.col_types(j, start_rowx=1, end_rowx=None)
             # 净化识别为数字的数据
             for i in range(len(type0_list)):
                 if type0_list[i] == 2:
@@ -334,7 +398,7 @@ class ExcelMaster:
 
     # 返回列名返回列索引
     def col_index(self, col_name):
-        first_col_list = self.table.row_values(0)  # 第一行元素生成列表
+        first_col_list = self.sheet.row_values(0)  # 第一行元素生成列表
         try:
             i = first_col_list.index(col_name)
         except ValueError:
@@ -369,8 +433,8 @@ class InstructionDialog:
                           "选中需要重命名的文件->打开模板文件->查看重命名表格->确定重命名\n\n" \
                           "二、选中需要重命名的文件\n" \
                           "2.1--本系统可以直接重命名各种类型的文件。请在打开文件窗中选中需要重命名的文件，" \
-                          "未选中文件则无法使用接下来的功能；\n" \
-                          "2.2--请保证需要重命名的文件处于同一文件夹，且文件名不含【.】\n" \
+                          "完成文件选择后系统会自动在该文件夹中创建默认模板文件[template.xls]，并将文件名导入模板文件；\n" \
+                          "2.2--请保证需要重命名的文件处于同一文件夹，且文件名不含小数点'.'\n" \
                           "（由于模板文件由Excel文件储存，小数点容易导致数据错误）\n\n" \
                           "三、打开模板文件\n" \
                           "3.1--模板文件由表格文件组成，如.xlsx/.xls/.et等文件。请在打开文件窗中选中对应的模板文件，" \
@@ -383,7 +447,7 @@ class InstructionDialog:
                           "为新文件名；\n" \
                           "4.2--删除表格列，用户双击表格中对应旧文件名可以删除表格列，取消对应文件的重命名请求；\n" \
                           "4.3--修改新文件名，用户可以双击表格中对应新文件名进行自定义修改，双击后请在弹出文本框中编辑，并点击确认。" \
-                          "若输入文件名非法，则无法修改。\n\n"\
+                          "若输入文件名非法，则无法修改。\n\n" \
                           "五、确认重命名\n" \
                           "用户在确认表格信息无误后可直接点击【确认更改】按钮执行操作。\n\n" \
                           "六、主界面快捷按钮说明\n" \
