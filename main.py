@@ -9,6 +9,7 @@ from xlutils.copy import copy
 from xlwt import Workbook
 
 ico_path = ".\CSPGCL.ico"
+SYS_NAME = "文件名批量修改系统"
 NEW_FILE_NAME = "新文件名"
 OLD_FILE_NAME = "旧文件名"
 
@@ -17,7 +18,7 @@ OLD_FILE_NAME = "旧文件名"
 # 1.请勿在文件名中添加'.'
 
 # 打包exe文件
-# pyinstaller -F -w main.py
+# pyinstaller -F -w F:\PythonProjects\Batch_rename\main.py
 
 class MyGUI:
     def __init__(self):
@@ -35,7 +36,7 @@ class MyGUI:
         self.init_window = Tk()
 
         self.pos_label = Label(self.init_window, text="当前位置")
-        self.edit_tips_label = Label(self.init_window, text="TIPS:双击原文件名删除该列\n 双击新文件名修改")
+        self.edit_tips_label = Label(self.init_window, text="【TIPS】添加文件后，\n可尝试双击表格文本哦！")
         self.cur_pos_label = Label(self.init_window, justify=LEFT)
         # 表格
         columns = ("1", "2", "3")
@@ -62,7 +63,7 @@ class MyGUI:
             self.disable_pos_list.append(rn - 1)
 
     def set_init_window(self):
-        self.init_window.title("一键批量修改文件名")
+        self.init_window.title(SYS_NAME)
         self.init_window.geometry("560x300+100+100")
         self.init_window.iconbitmap(ico_path)
 
@@ -157,22 +158,24 @@ class MyGUI:
         try:
             wb.save(self.template_path)
         except PermissionError:
-            messagebox.showwarning("请关闭文件下的模板并重新导入文件")
+            messagebox.showwarning("模板文件异常", "请关闭文件夹下的模板文件后再重新导入")
+            return
+        messagebox.showinfo("一切正常", "文件导入成功，模板文件已生成。\n请打开对应文件夹的模板文件编辑新文件名")
 
     def open_template(self):
         self.template_path = filedialog.askopenfilename(title="请选中新文件名的模板文件",
                                                         filetypes=[("表格文件", '*.xls; *.xlsx; *.et')])
         print(self.template_path)
         try:
-            temp_data = open_workbook(self.template_path)
+            tmp_data = open_workbook(self.template_path)
         except FileNotFoundError:
-            pass
+            return
         except XLRDError:
             messagebox.showwarning("请打开正确格式的模板文件")
-        else:
-            self.template_data = ExcelMaster(temp_data)
-            if self.check_file_integrity():
-                self.init_name_reflect_dict()
+            return
+        self.template_data = ExcelMaster(tmp_data)
+        if self.check_file_integrity():
+            self.init_name_reflect_dict()
 
     def check_file_integrity(self):
         flag = 0
@@ -289,11 +292,14 @@ class MyGUI:
                     messagebox.showwarning("新文件名格式有误", "新文件名有误：" + new_name + "\n合法文件名不应存在\\ / \" * : ? < > | 等字符")
                     entry_edit.delete(0.0, "end")
                 else:
+                    if rn > len(self.table_name_list1):
+                        self.table_name_list1.append("")
                     try:
                         self.tree_view.set(item, column=column, value=new_name)
                         self.table_name_list1[rn - 1] = new_name  # 刷新新文件名的列表
                     except NameError:
                         messagebox.showwarning("文件未添加", "请先添加文件后修改")
+                        return
                     entry_edit.destroy()
                     ok_btn.destroy()
 
@@ -323,7 +329,7 @@ class MyGUI:
                 name = self.table_name_list[i]
                 (name, ext) = os.path.splitext(name)
                 old_name = self.table_name_list0[i] + ext
-                new_name = self.table_name_list1[i] + ext
+                new_name = str(self.table_name_list1[i]).replace('\n', '') + ext
                 print("old_name: " + old_name)
                 print("new_name: " + new_name)
                 try:
@@ -454,17 +460,17 @@ class InstructionDialog:
                           "6.1--【？】按钮：显示使用流程及常见问题弹窗；\n" \
                           "6.2--【！】按钮：显示软件版权信息。"
         self.quest_text = "常见问题说明\n\n" \
-                          "Q1.为什么有些按钮无法点击？\n" \
-                          "A1.在所需步骤未执行时软件会禁用部分按钮，请按照正确使用流程操作。\n\n" \
-                          "Q2.请打开正确格式的文件\n" \
+                          "Q1.请关闭文件夹下的模板文件后再重新导入\n" \
+                          "A1.由于该系统会自动导入用户选中的旧文件名，请选择需求重命名的文件时确保模板文件处于关闭状态，否则会出现读写冲突。\n\n" \
+                          "Q2.请打开正确格式的模板文件\n" \
                           "A2.该软件仅能打开.xlsx/.xls/.et等表格文件，请检查打开文件格式。\n\n" \
                           "Q3.文件路径冲突\n" \
-                          "A3.软件默认每次只能修改同一路径（文件夹）下的文件。\n\n" \
+                          "A3.软件默认每次只能修改同一路径（即文件夹）下的文件。\n\n" \
                           "Q4.文件名格式有误\n" \
-                          "A4.请检查新文件名中是否包含非法字符。\n\n" \
+                          "A4.请检查涉及文件名中是否包含非法字符，如【\\/:*?\"<>|】。\n\n" \
                           "Q5.无法找到文件\n" \
                           "A5.请检查主界面显示的当前路径下是否包含对应文件。\n\n" \
-                          "其他问题请重启软件，无法解决请联系开发者。"
+                          "其他问题请重启软件，无法解决请及时联系开发者550728110@qq.com。"
         self.content_text = scrolledtext.ScrolledText(self.rootWindow, wrap=WORD)
         self.box_scrollbar_y = Scrollbar(self.rootWindow)
 
