@@ -6,12 +6,13 @@ from tkinter import filedialog, messagebox, ttk, scrolledtext
 
 from xlrd import open_workbook, XLRDError
 from xlutils.copy import copy
-from xlwt import Workbook
+from xlwt import Workbook, XFStyle, Font
 
 ico_path = ".\CSPGCL.ico"
 SYS_NAME = "文件名批量修改系统"
 NEW_FILE_NAME = "新文件名"
 OLD_FILE_NAME = "旧文件名"
+TEMPLATE_HINT = "请在左侧对应旧文件名行添加新文件名"
 
 
 # 温馨提示
@@ -119,8 +120,21 @@ class MyGUI:
             # 文件夹下无模板文件，直接创建然后导入数据
             wb = Workbook(encoding='ascii')
             ws = wb.add_sheet("1")
-            ws.write(0, 0, OLD_FILE_NAME)
-            ws.write(0, 1, NEW_FILE_NAME)
+
+            style1 = XFStyle()
+            font1 = Font()
+            font1.bold = True
+            style1.font = font1
+            ws.write(0, 0, OLD_FILE_NAME, style1)
+            ws.write(0, 1, NEW_FILE_NAME, style1)
+
+            style2 = XFStyle()
+            font2 = Font()
+            font2.bold = True
+            font2.colour_index = 2
+            style2.font = font2
+            ws.write(1, 3, TEMPLATE_HINT, style2)
+
             new_row_id = 1
             for i in range(len(self.table_name_list0)):
                 if i not in self.disable_pos_list:
@@ -130,7 +144,7 @@ class MyGUI:
             return
 
         # 文件夹下已经存在模板文件
-        #  暂时不检查完整性
+        # 暂时不检查完整性
         rb = open_workbook(self.template_path, formatting_info=True)
         r_sheet = rb.sheet_by_index(0)
         wb = copy(rb)
